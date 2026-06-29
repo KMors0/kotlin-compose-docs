@@ -532,3 +532,106 @@
 - [JNI vs JNA vs C-interop сравнение](https://andreas-tennert.de/jni-jna-c-interop/) — когда что выбирать
 - [JNA на GitHub](https://github.com/java-native-access/jna) — версия 5.14.0
 - [Kotlin/Native cinterop documentation](https://kotlinlang.org/docs/native-c-interop.html) — официальная документация
+
+---
+
+# Часть 5: INFO-блоки для встроенных функций Kotlin (30 июня 2026)
+
+Пользователь запросил добавление пояснений `> [!INFO]` для встроенных переменных и функций Kotlin (`let`, `it`, `apply`, `also`, `run`, `with`, `?.`, `?:`, `!!`, `as?`, `by`, `is`), которые появляются в примерах кода без объяснения. Это поможет новичкам понимать «магические» конструкции Kotlin.
+
+## Что добавлено
+
+### Глава 01 — Основы Kotlin
+**Самое значимое расширение.** Добавлено:
+
+1. **INFO-блок после первого примера с `?.` и `?:`** — объяснение safe call operator и Elvis operator, почему оператор `?:` назван в честь Элвиса.
+
+2. **INFO-блок после расширенных примеров с `let`, `it`, `as?`** — подробное объяснение каждой конструкции:
+   - `let` — встроенная функция для safe-call
+   - `it` — автоматическое имя единственного параметра лямбды
+   - `as?` — safe cast (vs обычный `as` который бросает ClassCastException)
+
+3. **Новая секция «Scope-функции: let, run, with, apply, also»** — полная таблица с примерами:
+   - Сравнительная таблица 5 scope-функций (объект как `it` vs `this`, что возвращают)
+   - Полные примеры для каждой функции
+   - INFO-блок с мнемоникой запоминания (функции с `a` — `apply`, `also` — возвращают сам объект)
+
+### Глава 00 — Словарь программиста
+- Заменён старый блок `> **Подсказка:**` на полноценный `> [!INFO]` с объяснением `it`, `acc`/`n` в `reduce`, и цепочек операций.
+
+### Глава 05 — Работа с данными
+- INFO-блок после примера с `serverTask.copy(syncState = SyncState.SYNCED)` — объяснение метода `.copy()` для data class, smart cast через `is`.
+
+### Глава 06 — Networking
+- INFO-блок после примера с `runCatching { ... }.recoverCatching { e -> ... }` — объяснение:
+  - `runCatching` — обёртка в Result<T>
+  - `recoverCatching` — обработка с возможностью пробросить новую ошибку
+  - `is` в `when` — smart cast
+  - `when` как expression — требование покрытия всех веток
+
+### Глава 08 — Navigation
+- INFO-блок после примера анимаций переходов — объяснение `it` в `slideInHorizontally { it / 4 }` (ширина экрана), оператор `+` для объединения анимаций, лямбды `enterTransition = { ... }`.
+
+### Глава 09 — Testing
+- INFO-блок после примера `runTest { ... advanceUntilIdle() ... }` — объяснение:
+  - `runTest` — виртуальное время для корутин
+  - `advanceUntilIdle` — продвижение времени до завершения всех корутин
+  - `@Test` — аннотация JUnit/kotlin-test
+  - Имена тестов в обратных кавычках — для читаемости отчётов
+
+### Глава 10 — Performance
+- INFO-блок после примера `remember(items) { items.sortedBy { it.priority } }` — объяснение:
+  - `remember(items)` — кэширование с зависимостью от ключей
+  - `it` в `sortedBy` — каждый элемент списка
+  - `items(sortedItems) { item -> ... }` — функция LazyColumn для рендеринга
+
+### Глава 20 — Deep-dive Kotlin
+- INFO-блок после примера extension function `String.capitalizeWords()` — подробный разбор:
+  - `fun String.capitalizeWords()` — синтаксис extension function
+  - `split(" ")` — неявный `this.split`
+  - `joinToString(" ") { ... }` — объединение с лямбдой преобразования
+  - `it` — элемент коллекции
+  - Вложенная лямбда `{ c -> ... }` — почему тут явное имя параметра
+  - `replaceFirstChar { ... }` — замена первого символа
+
+### Глава 32 — Управление состоянием
+- INFO-блок после примера `derivedStateOf { tasks.count { it.completed } }` — объяснение `by`, `derivedStateOf`, `it`, `.not()`.
+- INFO-блок после примера ViewModel с `_uiState.update { it.copy(...) }` — объяснение:
+  - `update { it.copy(...) }` — атомарное обновление с CAS
+  - `_uiState` vs `uiState` — конвенция приватного/публичного
+  - `asStateFlow()` — read-only обёртка
+  - `@Stable` — аннотация Compose для оптимизации recomposition
+  - `viewModelScope.launch { }` — scope корутины с автоотменой
+
+## Сводка
+
+| Глава | Добавлено INFO-блоков | Ключевые объяснённые конструкции |
+|-------|----------------------|----------------------------------|
+| 00-beginners-guide.md | 1 (заменён) | `it`, `acc`/`n` в reduce, цепочки операций |
+| 01-kotlin-basics.md | 3 + новая секция про scope-функции | `?.`, `?:`, `let`, `it`, `as?`, `apply`, `also`, `run`, `with` |
+| 05-data-storage.md | 1 | `.copy()`, smart cast `is` |
+| 06-networking-api.md | 1 | `runCatching`, `recoverCatching`, `is`, `when` как expression |
+| 08-navigation.md | 1 | `it` в `slideInHorizontally`, `+` для анимаций, лямбды transition |
+| 09-testing.md | 1 | `runTest`, `advanceUntilIdle`, `@Test`, backticks в именах |
+| 10-performance.md | 1 | `remember(keys)`, `it` в `sortedBy`, `items(...) { item -> }` |
+| 20-deep-dive-kotlin.md | 1 | extension function, `this`, вложенные лямбды, `it` vs явное имя |
+| 32-state-management-deep-dive.md | 2 | `by`, `derivedStateOf`, `update { it.copy() }`, `@Stable`, `viewModelScope` |
+| **Итого** | **12 INFO-блоков** + новая секция про scope-функции |
+
+## Принцип добавления INFO-блоков
+
+Каждый INFO-блок следует шаблону:
+- Формат: `> [!INFO]` — GitHub-flavored markdown alert
+- Расположение: сразу после примера кода с «магической» конструкцией
+- Содержимое: объяснение что это, эквивалент без сахара, когда использовать
+- Множественные конструкции в одном блоке разделены `>` (пустая строка с `>`)
+
+Пример:
+```markdown
+> [!INFO]
+> **`?.` (safe call operator)** — «если слева не null, вызови метод; иначе верни null». Эквивалент `if (name != null) name.length else null`.
+>
+> **`?:` (Elvis operator)** — «если слева не null, возьми его; иначе возьми то, что справа». Назван в честь Элвиса Пресли (похоже на прическу).
+```
+
+Теперь новичок, читающий документацию, не споткнётся о конструкции типа `name?.let { println(it.length) }` — каждая «магическая» конструкция объясняется там, где впервые появляется.

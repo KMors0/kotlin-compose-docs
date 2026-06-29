@@ -102,6 +102,15 @@ val isAtEnd by remember {
 }
 ```
 
+> [!INFO]
+> **`by`** (property delegation) — ключевое слово Kotlin для делегирования свойства. `val x by remember { ... }` означает «значение `x` делегируется объекту, который возвращает `remember`». Вместо прямого доступа вы получаете геттер/сеттер через делегат. Эквивалент без `by`: `val state = remember { ... }; val x = state.value` — но `by` позволяет писать `x` напрямую, без `.value`.
+>
+> **`derivedStateOf { ... }`** — функция Compose, создающая вычисляемое состояние, которое обновляется только когда результат лямбды изменяется. Лямбда читает другие состояния (`tasks`, `listState`), и Compose автоматически подписывается на них.
+>
+> **`it`** в `tasks.count { it.completed }` — каждый элемент списка `tasks`. `count { predicate }` вызывает лямбду для каждого элемента и считает, для скольких вернулось `true`. `it` — автоматическое имя единственного параметра.
+>
+> **`.not()`** — логическое отрицание. Эквивалент `!listState.canScrollForward`, но в форме метода — полезно для chain-вызовов: `a.b().not()` вместо `!(a.b())`.
+
 **Когда НЕ НУЖНО:**
 ```kotlin
 // ❌ Избыточно — tasks.count { ... } вызывается при каждой перекомпоновке
@@ -145,6 +154,17 @@ data class TasksUiState(
     val error: String? = null
 )
 ```
+
+> [!INFO]
+> **`_uiState.update { it.copy(isLoading = true) }`** — атомарное обновление состояния. `update` — метод `MutableStateFlow`, который читает текущее значение, применяет к нему лямбду и записывает результат. `it` — текущее значение `TasksUiState`. `it.copy(isLoading = true)` создаёт копию с изменённым полем `isLoading` (data class автоматически генерирует метод `copy`). Атомарность важна при конкурентных обновлениях — `update` использует CAS (compare-and-swap) под капотом.
+>
+> **`_uiState` (с подчёркиванием) vs `uiState`** — конвенция Kotlin: приватное `MutableStateFlow` с подчёркиванием, публичное `StateFlow` без. Внешний код может только читать `uiState`, изменять состояние может только ViewModel через `_uiState`.
+>
+> **`asStateFlow()`** — преобразует `MutableStateFlow` в read-only `StateFlow`. Внешний код не может вызвать `_uiState.value = ...` — только ViewModel имеет доступ к мутабельной версии.
+>
+> **`@Stable`** — аннотация Compose, помечает класс как стабильный (immortal, поля не меняются после создания). Compose использует это для оптимизации recomposition — если два `@Stable` объекта равны, Compose пропускает recomposition.
+>
+> **`viewModelScope.launch { ... }`** — запуск корутины в scope ViewModel. Когда ViewModel уничтожается, все корутины в `viewModelScope` автоматически отменяются — нет утечек.
 
 **Почему StateFlow, а не LiveData:**
 - StateFlow — часть kotlinx.coroutines, работает на всех платформах (LiveData — только Android).

@@ -79,6 +79,16 @@ class TasksViewModelTest {
         assertEquals(false, viewModel.isLoading) // Загрузка завершена
     }
 }
+```
+
+> [!INFO]
+> **`runTest { ... }`** — функция из `kotlinx-coroutines-test`, запускает тестовый блок корутин с виртуальным временем. Внутри `runTest` корутины выполняются синхронно и предсказуемо — можно контролировать время без реальных задержек.
+>
+> **`advanceUntilIdle()`** — функция внутри `runTest`, продвигает виртуальное время вперёд, пока все запущенные корутины не завершатся. Без этого вызова `viewModel.loadTasks()` может не успеть выполниться к моменту проверки `assertEquals(false, viewModel.isLoading)`.
+>
+> **`@Test`** — аннотация JUnit/kotlin-test, отмечает метод как тестовый. Тест-раннеры (JUnit, kotlin-test) находят все методы с `@Test` и запускают их.
+>
+> **Имена тестов в обратных кавычках** — `loading state is correct during fetch` — Kotlin позволяет использовать произвольные имена (с пробелами) в обратных кавычках. Это делает тест-отчёты более читаемыми: «loading state is correct during fetch PASSED» вместо «loadingStateIsCorrectDuringFetch PASSED».
 
 // Fake-реализация для тестов — работает на всех платформах
 class FakeTaskRepository(
