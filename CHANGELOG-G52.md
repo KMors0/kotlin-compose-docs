@@ -408,3 +408,127 @@
 | 37-app-size-optimization.md | Точечные правки | SQLDelight groupId в ProGuard |
 
 **Всего за три прохода обновлено:** 20 глав + README + CHANGELOG.
+
+---
+
+# Часть 4: расширение — HTTPS/QUIC, JNI, нативный код (30 июня 2026)
+
+Пользователь запросил добавление информации о работе с сетью (HTTPS, QUIC/HTTP/3), использовании JNI и расширение главы про Ktor. Добавлено ~360 строк нового контента в две главы.
+
+## Глава 06 — Networking: добавлена секция 6.7 «HTTPS, TLS и QUIC/HTTP/3»
+
+### Что добавлено
+
+**Подсекция «TLS — что происходит под капотом»:**
+- Полное описание TLS handshake (5 шагов: Client Hello → Server Hello → Certificate → Key Exchange → Encrypted communication).
+- Объяснение, что в KMP TLS обрабатывается engine'ами (OkHttp, Darwin, Java), но в продакшене нужно знать о certificate pinning, custom CA и HTTP/3.
+
+**Подсекция «Certificate Pinning — защита от MITM»:**
+- Описание проблемы: CA могут быть скомпрометированы (DigiNotar 2011, Symantec 2018), пользовательские root-CA на устройствах (корпоративный прокси, рутованное устройство).
+- Решение: pinning — проверка соответствия серверного сертификата ожидаемому public key.
+- Три способа реализации:
+  1. **OkHttp CertificatePinner** (Android/Desktop JVM) — с примером кода, объяснением backup pin.
+  2. **Android NetworkSecurityConfig** (XML) — с примером `network_security_config.xml`, подключением в манифесте.
+  3. **iOS Darwin engine** — через `URLSessionDelegate`, пример `PinningDelegate` класса с проверкой через `SecTrustCopyCertificateChain` и `SecCertificateCopyKey`.
+- Упоминание библиотеки TrustKit для упрощения на iOS.
+
+**Подсекция «Самоподписанные сертификаты и custom CA»:**
+- Пример для debug-сборки Android (через `<debug-overrides>` в NetworkSecurityConfig).
+- Пример для iOS Darwin engine.
+- **Критическое предупреждение:** никогда не отправляйте debug-конфигурацию с self-signed-доверием в production.
+
+**Подсекция «HTTP/3 и QUIC»:**
+- Описание HTTP/3: работает поверх QUIC (UDP), преимущества: 0-RTT handshake, multiplexing без head-of-line blocking, connection migration.
+- Таблица поддержки HTTP/3 в KMP-стеке на 30 июня 2026:
+  - OkHttp — ✅ через Cronet / experimental
+  - Darwin — ✅ нативно (NSURLSession)
+  - Java 11+ — ❌
+  - CIO (Ktor) — ❌ HTTP/1.x only
+  - Js (Wasm) — ❌
+- **Критическое уточнение:** Ktor CIO engine — только HTTP/1.x (актуально на Ktor 3.4.2). Для HTTP/3 используйте OkHttp+Cronet или Darwin.
+- Полный пример включения HTTP/3 через OkHttp + Cronet (dependencies, CronetEngine config, OkHttp integration).
+- Секции «Когда использовать HTTP/3» и «Когда НЕ использовать».
+
+### Изменения в Best practices (6.8)
+
+Добавлены строки в таблицу:
+- «Безопасность» — HTTPS-only, certificate pinning для критичных API, network security config.
+- «Performance для real-time» — HTTP/3 (QUIC) через OkHttp+Cronet на Android, Darwin на iOS.
+
+---
+
+## Глава 11 — Platform Integration: добавлена секция 11.6 «Работа с нативным кодом (JNI, C-interop)»
+
+### Что добавлено
+
+**Подсекция «Когда нужен нативный код»:**
+- Таблица типичных сценариев: криптография (OpenSSL, libsodium), обработка медиа (FFmpeg), ML (TensorFlow Lite, ONNX), высокопроизводительные вычисления (BLAS/LAPACK), legacy C-библиотеки, низкоуровневые API.
+
+**Подсекция «Три пути работы с нативным кодом»:**
+- Таблица сравнения: JNI (JVM/Android), JNA (JVM/Android), Kotlin/Native cinterop (iOS/macOS/Linux/Wasm).
+
+**Подсекция «JNI — для Android и JVM»:**
+- Полный пример из 3 шагов:
+  1. Объявление `external`-функции в Kotlin с `System.loadLibrary`.
+  2. Реализация на C++ (пример SHA-256 через OpenSSL, с правильным освобождением Java-массивов через `ReleaseByteArrayElements` + `JNI_ABORT`).
+  3. Сборка через CMake (конфиг в `build.gradle.kts` и `CMakeLists.txt`).
+- ABI filters: arm64-v8a, armeabi-v7a, x86_64.
+
+**Подсекция «JNA — упрощённый доступ без JNI-кода»:**
+- Описание JNA: доступ к C-функциям без написания JNI-обёрток, через reflection-like API.
+- Зависимость: `net.java.dev.jna:jna:5.14.0`.
+- Полный пример: интерфейс `CryptoLib`, загрузка через `Native.load()`, использование с `Memory` и `Pointer`.
+- Сравнительная таблица JNI vs JNA (производительность, объём кода, сборка, размер приложения, поддержка архитектур).
+- Рекомендация: JNA для прототипирования, JNI для production.
+
+**Подсекция «Kotlin/Native cinterop — для iOS, macOS, Linux, Wasm»:**
+- Объяснение: на Kotlin/Native JVM нет, JNI не работает — используется cinterop.
+- Полный пример из 3 шагов:
+  1. Создание `.def`-файла (`headers`, `headerFilter`, `linkerOpts`).
+  2. Подключение в `build.gradle.kts` через `cinterops.creating`, с `packageName` и опционально через CocoaPods.
+  3. Использование из Kotlin с `usePinned` для безопасной работы с указателями.
+- Объяснение, почему `usePinned` критичен: Kotlin/Native не даёт прямой доступ к указателям на массивы, `usePinned` фиксирует массив в памяти на время блока.
+
+**Подсекция «expect/actual абстракция для кроссплатформенного нативного кода»:**
+- Полный паттерн: `expect class NativeCrypto` в commonMain, `actual class` с JNI в androidMain, `actual class` с cinterop в iosMain, `actual class` с Web Crypto API в wasmJsMain.
+- Показан единый API для общего кода.
+
+**Подсекция «Готовые библиотеки вместо самостоятельной работы с JNI»:**
+- Таблица: задача → готовая библиотека → почему не писать свой JNI:
+  - SHA/AES/RSA — `kotlin-multiplatform-libsodium` или `AES-KMP`
+  - SQLite — `SQLDelight`
+  - HTTP/3 — `Ktor + Cronet` или `Ktor + Darwin`
+  - TLS — встроено в OkHttp/Darwin
+  - Image processing — `multiplatform-scoped-image-loader`
+  - Audio/Video — `ExoPlayer` (Android), `AVFoundation` (iOS)
+- Главное правило: JNI/cinterop — инструменты «последней мили».
+
+**Подсекция «Предостережения»:**
+1. Безопасность памяти: ошибки в C/C++ роняют весь процесс (SIGSEGV), JVM не спасает.
+2. App size: каждая ABI добавляет 1-3 МБ, использовать App Bundle (AAB).
+3. Kotlin/Native constraints: `StableRef` для удержания ссылок, легко создать утечку.
+4. Debugging: нужен LLDB/GDB, обычный Kotlin-debugger не работает; Android Studio Native Debug или Xcode.
+
+### Нумерация
+Старая секция «11.6. Desktop» переименована в «11.7. Desktop» — сдвинута, чтобы освободить место для новой секции про JNI.
+
+---
+
+## Итог 4-го прохода
+
+| Глава | Что добавлено | Объём |
+|-------|---------------|-------|
+| 06-networking-api.md | Новая секция 6.7 «HTTPS, TLS и QUIC/HTTP/3» (~220 строк) + обновлённая 6.8 Best practices | +220 строк |
+| 11-platform-integration.md | Новая секция 11.6 «Работа с нативным кодом (JNI, C-interop)» (~310 строк), секция Desktop сдвинута в 11.7 | +310 строк |
+| **Итого** | **~530 строк нового технического контента** | |
+
+## Источники для проверки (4-й проход)
+
+- [Ktor — Client engines](https://ktor.io/docs/http-client-engines.html) — статус HTTP/3 в разных engine'ах
+- [OkHttp + Cronet](https://developer.android.com/google/play/cronet) — интеграция HTTP/3 через Google Cronet
+- [Android Network Security Configuration](https://developer.android.com/training/articles/security-config) — certificate pinning через XML
+- [Apple NSURLSession delegate](https://developer.apple.com/documentation/foundation/urlsessiondelegate) — pinning на iOS
+- [TrustKit-iOS](https://github.com/datatheorem/TrustKit-iOS) — библиотека для упрощения pinning
+- [JNI vs JNA vs C-interop сравнение](https://andreas-tennert.de/jni-jna-c-interop/) — когда что выбирать
+- [JNA на GitHub](https://github.com/java-native-access/jna) — версия 5.14.0
+- [Kotlin/Native cinterop documentation](https://kotlinlang.org/docs/native-c-interop.html) — официальная документация

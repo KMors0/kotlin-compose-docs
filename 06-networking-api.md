@@ -458,7 +458,210 @@ suspend fun connectToChat(api: TaskApi, roomId: String) {
 
 ---
 
-## 6.7. Best practices
+## 6.7. HTTPS, TLS и QUIC/HTTP/3
+
+Большинство сетевых запросов сегодня идут через HTTPS — это HTTP поверх TLS. Понимание, как TLS работает в KMP-приложениях, критично для безопасности и производительности.
+
+### TLS — что происходит под капотом
+
+При `https://`-запросе происходит рукопожатие (TLS handshake):
+1. **Client Hello** — клиент отправляет список поддерживаемых TLS-версий и cipher suites.
+2. **Server Hello** — сервер выбирает TLS-версию (актуально TLS 1.3 — быстрее, 1 round-trip).
+3. **Сертификат сервера** — клиент проверяет цепочку доверия (CA → intermediate → server).
+4. **Key exchange** — стороны договариваются о session keys.
+5. **Encrypted communication** — все данные шифруются.
+
+В KMP вы обычно не работаете с TLS напрямую — engine (OkHttp, Darwin, Java) обрабатывает это. Но в продакшене нужно знать о трёх аспектах: certificate pinning, custom CA, и поддержка HTTP/3 (QUIC).
+
+### Certificate Pinning — защита от MITM
+
+**Проблема:** по умолчанию клиент доверяет любому сертификату, подписанному известным CA. Если CA скомпрометирован (случалось с DigiNotar в 2011, Symantec в 2018) или на устройстве установлен пользовательский root-CA (корпоративный прокси, рутованное устройство) — атакующий может перехватить трафик (Man-in-the-Middle).
+
+**Решение:** certificate pinning — клиент дополнительно проверяет, что серверный сертификат соответствует ожидаемому public key. Даже если CA скомпрометирован, MITM не пройдёт.
+
+#### Pinning через OkHttp (Android, Desktop JVM)
+
+```kotlin
+import okhttp3.CertificatePinner
+
+val pinner = CertificatePinner.Builder()
+    .add("api.example.com", "sha256/47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
+    .add("api.example.com", "sha256/mB0YQ8j5GE6cYzZJq9ZPeU3FYp3/o5E+p9Xk4Fr2jcI=")  // backup pin
+    .build()
+
+val client = HttpClient(OkHttp) {
+    engine {
+        config {
+            certificatePinner(pinner)
+        }
+    }
+}
+```
+
+> **Важно:** всегда добавляйте **backup pin** (второй публичный ключ). Если основной ключ скомпрометирован или истекает, вы сможете переключиться на backup без выпуска нового приложения.
+
+#### Pinning через Android NetworkSecurityConfig (XML)
+
+Альтернатива — настроить pinning на уровне Android-манифеста, без изменения Kotlin-кода:
+
+`androidApp/src/main/res/xml/network_security_config.xml`:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="true">api.example.com</domain>
+        <pin-set expiration="2027-12-31">
+            <pin digest="SHA-256">47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFuFU=</pin>
+            <pin digest="SHA-256">mB0YQ8j5GE6cYzZJq9ZPeU3FYp3/o5E+p9Xk4Fr2jcI=</pin>  <!-- backup -->
+        </pin-set>
+    </domain-config>
+</network-security-config>
+```
+
+Подключение в `AndroidManifest.xml`:
+```xml
+<application
+    android:networkSecurityConfig="@xml/network_security_config"
+    ...>
+</application>
+```
+
+#### Pinning на iOS (Darwin engine)
+
+На iOS certificate pinning реализуется через `URLSessionDelegate` — Darwin engine позволяет передать кастомный delegate:
+
+```kotlin
+// iosMain
+actual fun createHttpClient(): HttpClient = HttpClient(Darwin) {
+    engine {
+        configureSession {
+            sessionDelegate = PinningDelegate()
+        }
+    }
+}
+
+class PinningDelegate : NSObject(), NSURLSessionDelegate {
+    override fun URLSession(
+        session: NSURLSession,
+        didReceiveChallenge: NSURLAuthenticationChallenge,
+        completionHandler: (NSURLSessionAuthChallengeDisposition, NSURLCredential?) -> Unit
+    ) {
+        val serverTrust = didReceiveChallenge.protectionSpace.serverTrust
+        if (serverTrust != null) {
+            val cert = SecTrustCopyCertificateChain(serverTrust)?.firstOrNull()
+            val publicKey = SecCertificateCopyKey(cert)
+            // Сравниваем publicKey с ожидаемым
+            if (publicKey == expectedPublicKey) {
+                completionHandler(
+                    NSURLSessionAuthChallengeUseCredential,
+                    NSURLCredential.createTrust(serverTrust)
+                )
+            } else {
+                completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, null)
+            }
+        } else {
+            completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, null)
+        }
+    }
+}
+```
+
+> **Библиотеки для упрощения:** [TrustKit](https://github.com/datatheorem/TrustKit-iOS) — популярная iOS-библиотека для pinning, может быть интегрирована через expect/actual.
+
+### Самоподписанные сертификаты и custom CA
+
+Для разработки (или корпоративных приложений с внутренним CA) нужно доверять нестандартным сертификатам:
+
+```xml
+<!-- androidApp/src/main/res/xml/network_security_config.xml -->
+<network-security-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user"/>  <!-- доверять user-installed CA в debug -->
+            <certificates src="system"/>
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>
+```
+
+```kotlin
+// iosMain — через Darwin engine (ТОЛЬКО для debug!)
+engine {
+    configureSession {
+        // URLSessionDelegate с allowSelfSignedCertificates = true
+    }
+}
+```
+
+> **КРИТИЧНО:** никогда не отправляйте debug-конфигурацию с self-signed-доверием в production. Это полностью отключает защиту TLS.
+
+### HTTP/3 и QUIC
+
+**HTTP/3** — следующее поколение HTTP, работает поверх **QUIC** (Quick UDP Internet Connections) вместо TCP. Преимущества:
+- **0-RTT handshake** — при повторном подключении данные отправляются сразу, без рукопожатия.
+- **Multiplexing без head-of-line blocking** — несколько запросов в одном соединении, потеря пакета одного запроса не блокирует другие.
+- **Connection migration** — соединение сохраняется при переключении WiFi↔LTE.
+
+#### Поддержка HTTP/3 в KMP-стеке (на 30 июня 2026)
+
+| Engine | HTTP/3 статус | Путь включения |
+|--------|---------------|----------------|
+| **OkHttp** (Android) | ✅ через Cronet / experimental | `okhttp3.Http3` (experimental), или оборачивание Google Cronet |
+| **Darwin** (iOS) | ✅ нативно (NSURLSession) | Включается автоматически, если сервер поддерживает |
+| **Java 11+** (Desktop) | ❌ | Используйте OkHttp или Jetty HTTP3 client |
+| **CIO** (Ktor) | ❌ HTTP/1.x only | — |
+| **Js** (Wasm) | ❌ | Браузерный Fetch API ещё не стабилизировал HTTP/3 |
+
+> **Важно (актуально на Ktor 3.4.2):** Ktor CIO engine — **только HTTP/1.x**. Для HTTP/3 используйте OkHttp (с Cronet adapter) на Android или Darwin engine на iOS — они автоматически negotiate на HTTP/3 если сервер поддерживает (через Alt-Svc header).
+
+#### Включение HTTP/3 через OkHttp + Cronet
+
+```kotlin
+// build.gradle.kts (androidMain)
+dependencies {
+    implementation("com.google.android.gms:play-services-cronet:18.1.0")
+    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")  // или 4.12+ с экспериментальной поддержкой
+}
+```
+
+```kotlin
+// androidMain
+import okhttp3.OkHttpClient
+import org.chromium.net.CronetEngine
+
+val cronetEngine = CronetEngine.Builder(context)
+    .enableHttpCache(CronetEngine.Builder.HTTP_CACHE_IN_MEMORY, 1024 * 1024)
+    .enableHttp2(true)
+    .enableQuic(true)  // включает HTTP/3
+    .build()
+
+val okHttpClient = OkHttpClient.Builder()
+    // адаптер Cronet → OkHttp
+    .addInterceptor(CronetInterceptor.newBuilder(context).setCronetEngine(cronetEngine).build())
+    .build()
+
+val client = HttpClient(OkHttp) {
+    engine { preconfigured = okHttpClient }
+}
+```
+
+#### Когда выбирать HTTP/3
+
+✅ **Используйте HTTP/3, если:**
+- Мобильное приложение с частыми короткими запросами (мессенджеры, трейдинг).
+- Сервер за CDN с поддержкой HTTP/3 (Cloudflare, Fastly, Google Cloud CDN).
+- Пользователи часто переключаются между сетями (WiFi↔LTE).
+
+❌ **Не используйте HTTP/3, если:**
+- Сервер не поддерживает QUIC — клиенты автоматически откатятся на HTTP/2, но это лишняя работа.
+- Приложение работает в закрытой сети без UDP (некоторые корпоративные firewall блокируют UDP).
+- Нужна максимальная совместимость — HTTP/2 до сих пор более распространён.
+
+> **Best practice:** Включайте HTTP/3 как опциональную оптимизацию. Если клиент не может установить QUIC-соединение, он должен прозрачно откатиться на HTTP/2 или HTTP/1.1. Не делайте HTTP/3 обязательным требованием.
+
+---
+
+## 6.8. Best practices
 
 | Сценарий | Решение |
 |----------|---------|
@@ -469,7 +672,8 @@ suspend fun connectToChat(api: TaskApi, roomId: String) {
 | **Таймаут** | Настроить в `HttpTimeout` (30s request, 10s connect) |
 | **Forward-compatibility** | `ignoreUnknownKeys = true` в Json |
 | **Логирование в debug** | `Logging` плагин с `LogLevel.HEADERS`, отключить в release |
-| **Безопасность** | HTTPS-only, certificate pinning через OkHttp engine на Android |
+| **Безопасность** | HTTPS-only, certificate pinning для критичных API, network security config |
+| **Performance для real-time** | HTTP/3 (QUIC) через OkHttp+Cronet на Android, Darwin на iOS |
 
 ---
 
