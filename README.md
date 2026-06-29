@@ -1,6 +1,6 @@
 # Полное руководство по Kotlin, Compose Multiplatform и Material Design 3
 
-> Комплексная документация по разработке кроссплатформенных приложений с использованием Kotlin, Compose Multiplatform и Material Design 3.
+> Комплексная документация по разработке кроссплатформенных приложений с использованием Kotlin 2.4, Compose Multiplatform 1.11 и Material Design 3 Expressive. Документация актуализирована на **30 июня 2026**.
 
 ---
 
@@ -39,18 +39,18 @@
 
 | # | Раздел | Описание |
 |---|--------|----------|
-| 7 | [Локализация и интернационализация](07-localization.md) | Мультиязычность, kotlin-i18n |
-| 8 | [Расширенные возможности навигации](08-navigation.md) | Мультиплатформенная навигация, deep links |
-| 9 | [Тестирование](09-testing.md) | Юнит-тесты, UI-тесты, E2E, покрытие |
-| 10 | [Производительность и оптимизация](10-performance.md) | Рекомпоновки, кэширование, профилирование |
-| 11 | [Платформенная интеграция](11-platform-integration.md) | Android, iOS, Web, Desktop |
+| 7 | [Локализация и интернационализация](07-localization.md) | Compose Resources, Lyricist, плюрализация, смена языка |
+| 8 | [Расширенные возможности навигации](08-navigation.md) | navigation-compose, Decompose, Voyager, deep links |
+| 9 | [Тестирование](09-testing.md) | kotlin-test, Mockative, Compose UI Test, Kover, E2E |
+| 10 | [Производительность и оптимизация](10-performance.md) | Рекомпоновки, кэширование, профилирование, бенчмарки |
+| 11 | [Платформенная интеграция](11-platform-integration.md) | Android, iOS, Web, Desktop, медиа, фоновые задачи |
 
 ### 🟡 Инфраструктура и качество
 
 | # | Раздел | Описание |
 |---|--------|----------|
 | 12 | [Безопасность](12-security.md) | Хранение секретов, шифрование, защита от уязвимостей |
-| 13 | [DevOps и CI/CD](13-devops-cicd.md) | Сборка, деплой, автоматизация релизов |
+| 13 | [DevOps и CI/CD](13-devops-cicd.md) | GitHub Actions @v4, Codemagic, Bitrise, автоматизация релизов |
 | 14 | [Архитектурные паттерны](14-architecture.md) | Clean Architecture, MVI, Dependency Injection |
 | 15 | [Отладка и устранение ошибок](15-debugging.md) | Типичные проблемы, логирование, отладка на iOS |
 
@@ -75,6 +75,20 @@
 | 25 | [Конкурентный ландшафт](25-competitive-landscape.md) | KMP vs Flutter vs React Native |
 | 26 | [Заключение и перспективы](26-conclusion.md) | Ключевые выводы, рекомендации, дорожная карта |
 | 27 | [Источники и литература](27-sources.md) | 28 проверенных источников |
+
+### 🔵 Практические руководства
+
+| # | Раздел | Описание |
+|---|--------|----------|
+| 28 | [Доступность (Accessibility)](28-accessibility.md) | Semantics API, скринридеры, контраст, touch targets, тестирование a11y |
+| 29 | [Анимации и Motion](29-animations-motion.md) | animate*AsState, AnimatedVisibility, spring-физика, M3 Expressive, жесты |
+| 30 | [Миграция на KMP](30-migration-guide.md) | Пошаговый гайд: Android → KMP → iOS, таймлайн, чеклист |
+| 31 | [Шпаргалка (Quick Reference)](31-quick-reference.md) | Структура проекта, Gradle-команды, зависимости, version matrix |
+| 32 | [Управление состоянием: deep dive](32-state-management-deep-dive.md) | Snapshot, derivedStateOf, StateFlow, remember vs rememberSaveable, UDF |
+| 33 | [expect/actual: паттерны и антипаттерны](33-expect-actual-patterns.md) | 5 production-паттернов, 4 антипаттерна, тестирование, отладка |
+| 34 | [KMP Gotchas: подводные камни](34-kmp-gotchas.md) | New MM, freeze(), AtomicFU, retain cycles, serialization polymorphism |
+| 35 | [Адаптивные лейауты и foldables](31-adaptive-layouts.md) | WindowSizeClass, NavigationBar/Rail/Drawer, ListDetailPaneScaffold |
+| 36 | [Оптимизация размера приложения](37-app-size-optimization.md) | R8/ProGuard, shrinking iOS binaries, wasm tree-shaking, ресурсы |
 
 ### 📚 Справочник Kotlin (metanit.com)
 
@@ -125,19 +139,23 @@
 1. 🟢 **Только начинаете?** Начните с [Словаря программиста](00-beginners-guide.md) — все термины объяснены простым языком.
 2. Прочитайте [Введение](00-introduction.md), чтобы понять, почему этот стек актуален.
 3. Перейдите к [Основам Kotlin](01-kotlin-basics.md) — синтаксис, типы, коллекции.
-4. Изучите [Compose Multiplatform](02-compose-multiplatform.md) для UI-фреймворка.
+4. Изучите [Compose Multiplatform](02-compose-multiplatform.md) для UI-фреймворка (настройка через [KMP Wizard](https://kmp.jetbrains.com/)).
 5. Освойте [Material Design 3](03-material-design-3.md) для создания красивых интерфейсов.
 6. Соберите первое приложение по [Практическому примеру](04-practical-example.md).
 7. Для глубокого понимания — изучите разделы 20–27.
 
-## 🛠 Стек технологий
+## 🛠 Стек технологий (актуальные версии на 30 июня 2026)
 
-- **Kotlin** — основной язык программирования
-- **Compose Multiplatform** — декларативный UI-фреймворк от JetBrains
-- **Material Design 3** — дизайн-система от Google
-- **SQLDelight** — кроссплатформенная ORM
-- **Ktor** — HTTP-клиент для сетевых запросов
-- **Koin / Dagger-Hilt** — Dependency Injection
+- **Kotlin 2.4.0** — основной язык программирования (2.4.10-RC, 2.4.20-Beta1 в EAP)
+- **Compose Multiplatform 1.11.0** — декларативный UI-фреймворк от JetBrains
+- **Material Design 3 Expressive** — дизайн-система от Google (compose-material3 1.4.x)
+- **SQLDelight 2.1+** — кроссплатформенная ORM (groupId `app.cash.sqldelight`)
+- **Ktor 3.4.0** — HTTP-клиент для сетевых запросов
+- **kotlinx-coroutines 1.11.0** — асинхронное программирование
+- **Koin 4.0+ / Dagger-Hilt** — Dependency Injection
+- **AndroidX Navigation 2.9+** — type-safe навигация (работает на всех платформах с CMP 1.10+)
+
+> **См. также:** [Обновления экосистемы](17-ecosystem-updates.md) — полная таблица версий и дат релизов.
 
 ## 📊 Уровни сложности
 
@@ -145,4 +163,5 @@
 |---------|---------|----------|
 | 🟢 Начинающий | Словарь, 00–04, 19 | Те, кто начинает с Kotlin и Compose |
 | 🟡 Продвинутый | 05–18 | Разработчики с опытом Kotlin |
+| 🔵 Практические | 28–37 | Разработчики, решающие конкретные задачи |
 | 🔴 Экспертный | 20–27 | Архитекторы, техлиды, принимающие решения |

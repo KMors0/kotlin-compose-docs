@@ -71,7 +71,7 @@ suspend fun loadDashboard() = coroutineScope {
 
 ## 20.3. Компилятор K2
 
-Kotlin 2.0 представил новый компилятор K2 с полностью переписанным фронтендом, использующим единую структуру данных с расширенной семантической информацией. K2 обеспечивает:
+Kotlin 2.0 (май 2024) представил новый компилятор K2 с полностью переписанным фронтендом, использующим единую структуру данных с расширенной семантической информацией. K2 обеспечивает:
 
 - **Ускорение компиляции:** до 94% ускорение чистых сборок по сравнению с K1 (по результатам бенчмарков Tech Insider)
 - **Улучшенное разрешение вызовов и вывод типов:** компилятор более последовательно понимает код разработчика
@@ -79,7 +79,28 @@ Kotlin 2.0 представил новый компилятор K2 с полно
 - **Улучшенная производительность IDE:** более быстрая подсветка синтаксиса, автодополнение и анализ кода
 - **Унификация платформ:** единый компилятор для всех целевых платформ (JVM, JS, Native, Wasm)
 
-Миграция на K2 прошла относительно гладко для большинства проектов, хотя некоторые проблемы были связаны с изменениями в поведении вывода типов и отражения (reflection).
+### K2 и плагины: KSP2
+
+Начиная с Kotlin 2.4, рекомендуется использовать **KSP2** — новое поколение Kotlin Symbol Processing API. KSP2 работает на базе K2, существенно быстрее (до 2x в некоторых проектах) и поддерживает incremental processing лучше, чем KSP1.
+
+```kotlin
+// build.gradle.kts
+plugins {
+    id("com.google.devtools.ksp") version "2.4.0-1.0.21"  // KSP2
+}
+```
+
+> **Миграция с KSP1:** в большинстве случаев достаточно обновить версию KSP до совместимой с Kotlin 2.4. KSP2 обратно совместим с большинством KSP1-процессоров. Известные проблемы — с процессорами, использующими internal API.
+
+### Миграция на K2
+
+Миграция на K2 прошла относительно гладко для большинства проектов, хотя некоторые проблемы были связаны с изменениями в поведении вывода типов и отражения (reflection). Главные Breaking changes:
+
+- **Более строгий вывод типов в лямбдах** — некоторые паттерны, которые работали в K1 из-за слабого вывода, теперь требуют явных аннотаций.
+- **Изменения в `@JvmDefault`** — теперь всегда включено, аннотация deprecated.
+- **Унифицированная обработка `when`-выражений** — exhaustive check теперь строже.
+
+JetBrains предоставляет [K2 Migration Guide](https://kotlinlang.org/docs/k2-migration-guide.html) с подробным списком изменений.
 
 ---
 
@@ -110,11 +131,13 @@ actual fun platformName(): String = "iOS"
 
 ```kotlin
 fun String.capitalizeWords(): String =
-    split(" ").joinToString(" ") { it.capitalize() }
+    split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
 
 // Использование
 "hello world".capitalizeWords()  // "Hello World"
 ```
+
+> **Примечание:** `String.capitalize()` устарел с Kotlin 1.5, используйте `replaceFirstChar { it.uppercase() }`.
 
 ### Data classes
 
@@ -122,16 +145,121 @@ fun String.capitalizeWords(): String =
 
 ```kotlin
 data class User(val name: String, val age: Int)
+val user = User("Alice", 30)
 val updated = user.copy(age = user.age + 1)
 ```
+
+### Новые возможности Kotlin 2.x
+
+#### Guard-выражения (Kotlin 2.2 stable, было в preview с 2.1)
+
+`when`-выражения поддерживают guard-условия через `if`:
+
+```kotlin
+fun classify(number: Int): String = when (number) {
+    0 -> "ноль"
+    else if (number > 0) -> "положительное"
+    else if (number < 0) -> "отрицательное"
+    else -> "невозможно"  // на самом деле недостижимо
+}
+
+// Полезно для sealed-классов с дополнительными условиями
+when (state) {
+    is State.Loading -> "Загрузка"
+    is State.Success if state.data.isEmpty() -> "Пусто"
+    is State.Success -> "Данные: ${state.data.size}"
+    is State.Error if state.isRetryable -> "Ошибка, можно повторить"
+    is State.Error -> "Ошибка"
+}
+```
+
+#### Non-local break и continue (Kotlin 2.2 stable)
+
+В лямбдах, переданных в inline-функции, можно использовать `break` и `continue` для выхода из внешнего цикла:
+
+```kotlin
+for (i in 1..10) {
+    listOf(1, 2, 3, -1, 4).forEach {
+        if (it < 0) break  // выходит из for, а не только из forEach
+        println("$i - $it")
+    }
+}
+```
+
+#### Multi-dollar string literals (Kotlin 2.2 stable)
+
+Для строк, содержащих символ `$`, можно использовать несколько `$$` для экранирования:
+
+```kotlin
+val template = """
+    Price: $$price
+    Variable: \\$variable
+"""".trimIndent()
+// $$price → буквально $price, \\$variable → ${'$'}variable
+```
+
+#### Контекстные параметры (Kotlin 2.4 — Alpha)
+
+Контекстные параметры — эволюция контекстных ресиверов, позволяют объявить, что функция требует определённый контекст вызова:
+
+```kotlin
+context(logger: Logger)
+fun doSomething() {
+    logger.info("Doing something")
+}
+
+// Использование
+with(Logger.STDOUT) {
+    doSomething()  // компилятор подставит logger автоматически
+}
+
+// Явная передача (Kotlin 2.4+)
+doSomething(logger = Logger.STDOUT)
+```
+
+> **Статус (Kotlin 2.4.0):** контекстные параметры в Alpha-статусе. Поддержка в IntelliJ IDEA 2026.2. Для production пока лучше использовать классические подходы (DI через Koin, параметры функции).
 
 ### Другие возможности
 
 - **Классы-делегаты (Delegation)** через ключевое слово `by` — реализуют паттерн «делегирование» без бойлерплейт-кода
 - **DSL-конструкторы** — позволяют создавать предметно-ориентированные языки, как это делает сам Compose с декларативным UI
-- **Sealed классы** — обеспечивают исчерпывающую обработку вариантов в `when`-выражениях
+- **Sealed классы и интерфейсы** — обеспечивают исчерпывающую обработку вариантов в `when`-выражениях
 - **Inline-функции с reified-параметрами** — сохраняют информацию о типах в runtime
 - **Деструктурирующие объявления** — позволяют распаковывать объекты на отдельные переменные
+- **Value classes (inline)** — обёртки над примитивными типами с нулевой стоимостью в runtime
+
+---
+
+## 20.6. Kotlin 2.4 — что нового для Multiplatform
+
+Кotlin 2.4 (май 2026) добавил несколько важных возможностей для KMP-разработчиков:
+
+### Swift Export (Alpha)
+
+Новая генерация iOS-фреймворков напрямую в Swift, минуя Objective-C. См. раздел [33. expect/actual паттерны](33-expect-actual-patterns.md#336-swift-export-и-spm-import-kotlin-24).
+
+### Swift Package Manager import
+
+Возможность объявлять Swift packages как зависимости KMP-модуля. Раньше для использования Swift-библиотеки из Kotlin/Native нужно было создавать Objective-C wrapper, теперь можно напрямую:
+
+```kotlin
+kotlin {
+    iosArm64()
+    spmDependencies {
+        swiftPackage("https://github.com/example/SwiftLib.git") {
+            version = "1.0.0"
+        }
+    }
+}
+```
+
+### Стабилизация Wasm GC
+
+Wasm-таргет (Kotlin/Wasm) теперь полностью стабильный. Compose Multiplatform 1.11+ использует Wasm GC для рендеринга UI в браузере, что обеспечивает производительность на уровне нативных приложений.
+
+### Coroutine stack trace recovery (Kotlin 2.4.20-Beta1)
+
+В standard library добавлена поддержка восстановления stack trace в корутинах — ранее при ошибке в корутине stack trace не показывал полную цепочку вызовов. Это улучшение упрощает отладку асинхронного кода.
 
 ---
 

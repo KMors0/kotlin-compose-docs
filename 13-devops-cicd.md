@@ -6,47 +6,61 @@
 
 ## 13.1. Сборка и деплой
 
-- Настройте Gradle для мультиплатформы:
-  ```bash
-  ./gradlew assembleAndroidApp
-  ./gradlew composeWebBrowser
-  ```
-- Используйте Docker для изоляции окружения.
+Сборка кроссплатформенного приложения требует разных инструментов для каждой платформы. Android использует стандартный Gradle-плагин и генерирует APK/AAB. iOS требует Xcode и генерирует IPA. Web компилирует Kotlin/Wasm в WebAssembly-бандл. Desktop компилируется в JVM-приложение с нативными установщиками (MSI, DMG, DEB). Docker помогает унифицировать окружение сборки, гарантируя воспроизводимость.
 
-Сборка кроссплатформенного приложения требует разных инструментов для каждой платформы. Android-сборка использует стандартный Gradle-плагин и генерирует APK/AAB. iOS-сборка требует Xcode и генерирует IPA. Web-сборка компилирует Kotlin/JS и генерирует статические файлы. Docker помогает унифицировать окружение сборки — вы можете создать образ с предустановленными JDK, Gradle и другими инструментами, чтобы гарантировать воспроизводимость сборки на любом CI-сервере.
+```bash
+# Android
+./gradlew :androidApp:assembleDebug
+./gradlew :androidApp:bundleRelease         # AAB для Google Play
+
+# iOS (требует macOS + Xcode)
+./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64
+
+# Web (Wasm)
+./gradlew :composeApp:wasmJsBrowserProductionWebpack
+
+# Desktop
+./gradlew :composeApp:packageDmg
+./gradlew :composeApp:packageMsi
+
+# Все тесты
+./gradlew :composeApp:allTests
+```
 
 ---
 
-## 13.2. GitHub Actions / GitLab CI
+## 13.2. GitHub Actions (актуальные версии)
 
-**Пример workflow для Android:**
+> **Важно:** Используйте актуальные версии action. Плагины `@v2`, `@v3` устарели и могут перестать работать. Текущие стабильные версии: `@v4`.
+
+**Пример Android CI (актуальный):**
 ```yaml
 name: Android CI
 
-on: push
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up JDK 11
-        uses: actions/setup-java@v3
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          java-version: '11'
-          distribution: 'adopt'
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
       - name: Build with Gradle
-        run: ./gradlew assemble
+        run: ./gradlew :androidApp:assembleDebug
       - name: Upload APK
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: android-app
           path: androidApp/build/outputs/apk/
 ```
 
-GitHub Actions — один из самых популярных CI/CD-инструментов для open-source проектов. Для кроссплатформенного проекта вам понадобится несколько job'ов: один для Android (Ubuntu + JDK), один для iOS (macOS + Xcode) и один для Web (Ubuntu + Node.js). Используйте matrix builds для параллельного запуска тестов на разных платформах.
-
-**Пример мультиплатформенного CI:**
+**Мультиплатформенный CI с матрицей:**
 ```yaml
 name: Multiplatform CI
 
@@ -56,21 +70,69 @@ jobs:
   test:
     strategy:
       matrix:
-        platform: [android, ios, web]
-    runs-on: ${{ matrix.platform == 'ios' && 'macos-latest' || 'ubuntu-latest' }}
+        platform: [android, desktop, wasm-js]
+        include:
+          - platform: android
+            runs-on: ubuntu-latest
+            command: ./gradlew :composeApp:androidUnitTest
+          - platform: desktop
+            runs-on: ubuntu-latest
+            command: ./gradlew :composeApp:desktopTest
+          - platform: wasm-js
+            runs-on: ubuntu-latest
+            command: ./gradlew :composeApp:wasmJsBrowserTest
+          - platform: ios
+            runs-on: macos-latest
+            command: ./gradlew :composeApp:iosSimulatorArm64Test
+    runs-on: ${{ matrix.runs-on || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-java@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@v4
       - name: Run tests
-        run: ./gradlew :shared:${{ matrix.platform }}Test
+        run: ${{ matrix.command }}
 ```
 
 ---
 
-## 13.3. Автоматизация релизов
+## 13.3. Codemagic и Bitrise для iOS CI
+
+GitHub Actions не подходит для iOS-сборок в больших объёмах из-за лимита 2000 минут на macOS-раннеры. Для production KMP-проектов используют специализированные сервисы:
+
+**Codemagic** — CI/CD от Nevercode, оптимизированный для Flutter и KMP. Поддерживает одновременную сборку Android + iOS, встроенное кодподписание, публикацию в App Store и Google Play.
+
+```yaml
+# codemagic.yaml
+workflows:
+  build:
+    name: KMP Build
+    max_build_duration: 30
+    environment:
+      java: 17
+      xcode: 16
+    scripts:
+      - name: Build Android
+        script: ./gradlew :androidApp:assembleRelease
+      - name: Build iOS
+        script: |
+          cd iosApp
+          pod install
+          xcodebuild -workspace iosApp.xcworkspace -scheme iosApp -sdk iphonesimulator -configuration Debug
+    artifacts:
+      - androidApp/build/outputs/apk/**/*.apk
+      - iosApp/build/Build/Products/Debug-iphonesimulator/*.app
+```
+
+**Bitrise** — альтернативный CI/CD с хорошей поддержкой iOS. Предоставляет готовые шаги (steps) для установки CocoaPods, запуска Xcode-тестов и публикации.
+
+Выбор между GitHub Actions и специализированными сервисами зависит от масштаба проекта. Для open-source и небольших команд GitHub Actions достаточно. Для enterprise-проектов с частыми iOS-сборками — Codemagic или Bitrise экономят время и деньги.
+
+---
+
+## 13.4. Автоматизация релизов
 
 - Используйте SemVer для версий.
 - Подписывайте APK/IPA через CI:

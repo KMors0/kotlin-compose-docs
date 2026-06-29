@@ -1,6 +1,6 @@
 # Производительность и оптимизация
 
-> Производительность — критически важный аспект пользовательского опыта. В этой части рассматриваются методы анализа и оптимизации производительности приложений на Compose Multiplatform, включая минимизацию перекомпоновок, кэширование данных и профилирование.
+> Производительность — критически важный аспект пользовательского опыта. Этот раздел описывает методы анализа и оптимизации Compose Multiplatform-приложений на 2026 год: минимизация перекомпоновок, кэширование, использование `contentType` в Lazy-списках, профилирование через Layout Inspector и актуальные возможности рендеринга через Skia M144.
 
 ---
 
@@ -63,9 +63,17 @@ fun ExpensiveList(items: List<Item>) {
   ```kotlin
   items(tasks, key = { it.id }) { task -> TaskItem(task) }
   ```
+- Укажите `contentType()` для переиспользования компонентов (Compose Multiplatform 1.7+):
+  ```kotlin
+  items(tasks, key = { it.id }, contentType = { it.type }) { task ->
+      TaskItem(task)
+  }
+  ```
 - Минимизируйте вычисления внутри `@Composable`-функций.
 
 `LazyColumn` — ключевой инструмент для отображения больших списков в Compose. В отличие от `Column`, которая рендерит все элементы сразу, `LazyColumn` загружает только видимые элементы и несколько элементов за пределами видимой области (prefetching). Указание `key` позволяет Compose эффективно обновлять список при изменениях — перемещении, добавлении или удалении элементов — без полной перерисовки.
+
+**`contentType` (важно для гетерогенных списков):** если список содержит элементы разных типов (например, задачи, заголовки секций, баннеры), укажите `contentType` — Compose будет переиспользовать «слоты» того же типа, что снижает количество создаваемых компонент и улучшает производительность при быстром скролле.
 
 **Дополнительные оптимизации:**
 ```kotlin
@@ -77,7 +85,7 @@ LazyColumn {
         val task = tasks[index]
         TaskItem(
             task = task,
-            modifier = Modifier.animateItemPlacement() // анимация перестановки
+            modifier = Modifier.animateItem() // с Compose 1.7+ (замена animateItemPlacement)
         )
     }
 }
@@ -95,8 +103,142 @@ LazyColumn {
 **Рекомендации по профилированию:**
 - Профилируйте на реальных устройствах, а не на эмуляторах.
 - Измеряйте производительность в release-сборке (с оптимизациями).
-- Обращайте внимание на帧 rate — он должен быть стабильным 60fps или 120fps.
+- Обращайте внимание на frame rate — он должен быть стабильным 60fps или 120fps.
 - Используйте `Benchmark` библиотеку для автоматизированного тестирования производительности.
+
+---
+
+## 10.5. Бенчмарки (kotlinx-benchmark)
+
+Для количественного измерения производительности кода используйте [kotlinx-benchmark](https://github.com/Kotlin/kotlinx-benchmark) — официальную библиотеку бенчмарков, работающую на JVM и Kotlin/Native.
+
+**Настройка:**
+```kotlin
+// build.gradle.kts
+plugins {
+    id("org.jetbrains.kotlinx.benchmark") version "0.4.12"
+}
+
+benchmark {
+    targets { register("desktopBenchmark") }
+    configurations {
+        named("desktopBenchmark") {
+            iterations = 10
+            warmups = 5
+            iterationTime = 500
+        }
+    }
+}
+
+dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:0.4.12")
+}
+```
+
+**Пример бенчмарка:**
+```kotlin
+import kotlinx.benchmark.*
+
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(BenchmarkTimeUnit.MICROSECONDS)
+@State(Scope.Benchmark)
+class SortingBenchmark {
+    @Param("100", "1000", "10000")
+    var size: Int = 0
+    private lateinit var items: List<Task>
+
+    @Setup
+    fun setup() {
+        items = List(size) { Task("$it", "Task $it", false) }
+    }
+
+    @Benchmark
+    fun sortByPriority() = items.sortedBy { it.priority }
+
+    @Benchmark
+    fun filterAndSort() = items.filter { it.completed }.sortedByDescending { it.createdAt }
+}
+```
+
+**Запуск:** `./gradlew :composeApp:desktopBenchmark`
+
+**Android Macrobenchmark** — для измерения startup time и frame time на устройствах:
+```kotlin
+@LargeTest
+@RunWith(AndroidJUnit4::class)
+class ComposeStartupBenchmark {
+    @get:Rule
+    val benchmarkRule = MacrobenchmarkRule()
+
+    @Test
+    fun startup() = benchmarkRule.measureRepeated(
+        packageName = "com.example.app",
+        metrics = listOf(StartupTimingMetric()),
+        iterations = 5,
+        startupMode = StartupMode.COLD
+    ) {
+        pressHome()
+        startActivityAndWait()
+    }
+}
+```
+
+Рекомендуется измерять: startup time (холодный/тёплый старт), scroll performance (frame time в LazyColumn), время рендеринга сложных экранов. Сравнивайте результаты между релизами для отслеживания регрессий.
+
+---
+
+## 10.6. Рендеринг через Skia M144
+
+Compose Multiplatform рендерит UI через [Skia](https://skia.org/) — графическую библиотеку, также используемую Google Chrome, Flutter и Adobe products. Связка Skia с Kotlin называется [skiko](https://github.com/JetBrains/skiko) (Skia for Kotlin).
+
+**Актуальная версия (CMP 1.11.1, июнь 2026):** Skia M144. Версия M144 принесла:
+- Улучшенную производительность рендеринга текста (особенно для CJK-языков и арабской вязи).
+- Оптимизации для сложных путей (SVG-графика, векторные иконки).
+- Лучшую работу на iOS через Metal backend.
+- Уменьшенный размер бинарника для Wasm-таргета.
+
+### Проверка версии Skia
+
+```kotlin
+// В runtime можно проверить версию skiko
+import org.jetbrains.skiko.Skiko
+
+fun logSkikoVersion() {
+    println("Skiko version: ${Skiko.version}")
+    println("Skia version: ${org.jetbrains.skia.skiaVersion}")
+}
+```
+
+### Backend'ы рендеринга
+
+| Платформа | Backend | Особенности |
+|-----------|---------|-------------|
+| **Android** | OpenGL ES / Vulkan | Автоматический выбор по API level |
+| **iOS** | Metal (через Skia) | Нативная производительность, 120 Гц ProMotion |
+| **Desktop (JVM)** | OpenGL | Через GLFW для оконного режима |
+| **Web (Wasm)** | WebGL 2 / WebGPU | WebGPU экспериментальный, требует Chrome 113+ |
+
+> **Совет:** если видите проблемы с рендерингом (мерцание, чёрные артефакты, тиринг), проверьте — это может быть regression в новой версии Skia. Можно временно откатить skiko версию:
+> ```toml
+> # gradle/libs.versions.toml
+> [versions]
+> skiko = "0.9.20"  # явно указать версию
+> ```
+
+---
+
+## 10.7. K2 compiler и производительность сборки
+
+С Kotlin 2.4 + K2 compiler:
+- **Чистая сборка** — до 94% быстрее, чем на Kotlin 1.9 (по бенчмаркам JetBrains).
+- **Инкрементальная сборка** — улучшена обработка изменений в многомодульных проектах.
+- **KSP2** — до 2x быстрее annotation processing (важно для проектов с Room, Moshi, Koin annotations).
+
+Чтобы убедиться, что K2 включён:
+```kotlin
+// gradle.properties
+kotlin.compiler.useK2=true  # по умолчанию true с Kotlin 2.0
+```
 
 ---
 

@@ -71,21 +71,102 @@ fun WebFeature() {
 
 ---
 
-## 11.4. Desktop (Compose Desktop)
+## 11.4. Работа с медиа (камера, галерея, файлы)
+
+Кроссплатформенная работа с медиа требует `expect/actual` для доступа к платформенным API. Начиная с 2025 года, библиотеки вроде [Compose Multiplatform Media](https://github.com/nicreboy/Compose-Multiplatform-Media) и [moko-media](https://github.com/icerockdev/moko-media) упрощают этот процесс.
+
+**expect/actual для выбора изображения из галереи:**
+```kotlin
+// commonMain
+expect class ImagePicker() {
+    fun pickImage(onResult: (ByteArray?) -> Unit)
+}
+
+// androidMain
+actual class ImagePicker {
+    actual fun pickImage(onResult: (ByteArray?) -> Unit) {
+        // Использование ActivityResultLauncher с PickVisualMedia
+    }
+}
+
+// iosMain  
+actual class ImagePicker {
+    actual fun pickImage(onResult: (ByteArray?) -> Unit) {
+        // Использование PHPickerViewController через Swift interop
+    }
+}
+```
+
+**Разрешения (permissions) — кроссплатформенная абстракция:**
+```kotlin
+// commonMain
+expect fun checkPermission(permission: Permission): Boolean
+expect fun requestPermission(permission: Permission, onResult: (Boolean) -> Unit)
+
+enum class Permission { Camera, Gallery, Notifications, Location }
+```
+
+---
+
+## 11.5. Фоновые задачи (Background Work)
+
+Фоновые задачи (синхронизация, загрузка, уведомления) зависят от платформы. Для кроссплатформенного подхода используйте `expect/actual` или библиотеки-обёртки.
+
+**Android:**
+- **WorkManager** — гарантированное выполнение (даже после перезагрузки), для периодических задач.
+- **Coroutine + Service** — для задач привязанных к жизни приложения.
+
+**iOS:**
+- **BGTaskScheduler** — фоновые задачи с лимитом ~30 секунд.
+- **Background Fetch** — периодическая загрузка данных (контролируется ОС).
+
+**Кроссплатформенная абстракция:**
+```kotlin
+// commonMain
+expect class BackgroundScheduler() {
+    fun schedulePeriodic(taskId: String, intervalMs: Long, task: () -> Unit)
+    fun scheduleOneTime(taskId: String, delayMs: Long, task: () -> Unit)
+    fun cancel(taskId: String)
+}
+
+// androidMain
+actual class BackgroundScheduler {
+    actual fun schedulePeriodic(taskId: String, intervalMs: Long, task: () -> Unit) {
+        val request = PeriodicWorkRequestBuilder<SyncWorker>(
+            repeatInterval = intervalMs, TimeUnit.MILLISECONDS
+        ).build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            taskId, ExistingPeriodicWorkPolicy.KEEP, request
+        )
+    }
+    // ...
+}
+
+// iosMain
+actual class BackgroundScheduler {
+    actual fun schedulePeriodic(taskId: String, intervalMs: Long, task: () -> Unit) {
+        // BGAppRefreshTask через Swift interop
+    }
+    // ...
+}
+```
+
+> **Важно:** iOS агрессивно ограничивает фоновые задачи. Не полагайтесь на точное время выполнения — ОС может задержать или отменить задачу для экономии батареи. Критичные операции (платежи, важные уведомления) лучше выполнять через push-уведомления с сервера.
+
+---
+
+## 11.6. Desktop (Compose Desktop)
 
 - Установите `compose-desktop` плагин.
 - Настройте `build.gradle`:
   ```kotlin
-  jvm {
+  jvm("desktop") {
       withJava()
-      dependencies {
-          implementation(compose.desktop)
-      }
   }
   ```
 - Запустите приложение как обычное JVM-приложение.
 
-Compose Desktop позволяет создавать десктопные приложения для Windows, macOS и Linux, используя тот же декларативный подход, что и для мобильных платформ. Приложения компилируются в JVM-байткод и запускаются через JRE. Для дистрибуции можно создать нативные установщики (MSI, DMG, DEB) с помощью `compose.desktop.application`.
+Compose Desktop позволяет создавать десктопные приложения для Windows, macOS и Linux, используя тот же декларативный подход, что и для мобильных платформ. Приложения компилируются в JVM-байткод и запускаются через JRE. Для дистрибуции можно создать нативные установщики (MSI, DMG, DEB) через `compose.desktop.application`.
 
 **Пример точки входа:**
 ```kotlin
