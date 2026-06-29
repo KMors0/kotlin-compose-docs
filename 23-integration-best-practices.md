@@ -10,10 +10,10 @@
 
 ```toml
 [versions]
-kotlin = "2.1.0"
-compose-multiplatform = "1.8.0"
-agp = "8.7.0"
-material3 = "1.3.0"
+kotlin = "2.4.0"
+compose-multiplatform = "1.11.0"
+agp = "9.0.0"
+material3 = "1.4.0"
 
 [libraries]
 material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
@@ -24,7 +24,7 @@ composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose-mu
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ```
 
-В модуле `shared` настраивается общая тема Material 3, которая автоматически применяется на всех платформах. Для платформоспецифичных настроек (например, динамического цвета на Android) используются `expect`/`actual` декларации:
+В модуле `composeApp` (стандартное имя с CMP 1.10) настраивается общая тема Material 3, которая автоматически применяется на всех платформах. Для платформоспецифичных настроек (например, динамического цвета на Android) используются `expect`/`actual` декларации:
 
 ```kotlin
 // commonMain
@@ -49,7 +49,7 @@ actual fun getAppColorScheme(isDark: Boolean): ColorScheme =
 
 ## 23.2. Кроссплатформенное темирование
 
-Один из ключевых advantage'ов стека — единая тема для всех платформ. `MaterialTheme` из `androidx.compose.material3` работает одинаково на Android, iOS, Desktop и Web. Это означает, что цветовая палитра, типографика, форма компонентов и их поведение полностью согласованы на всех платформах без дополнительных усилий.
+Один из ключевых преимуществ стека — единая тема для всех платформ. `MaterialTheme` из `androidx.compose.material3` работает одинаково на Android, iOS, Desktop и Web. Это означает, что цветовая палитра, типографика, форма компонентов и их поведение полностью согласованы на всех платформах без дополнительных усилий.
 
 Для импорта темы из [Material Theme Builder](https://m3.material.io/theme-builder) в KMP-проект необходимо убедиться, что пакетный путь корректен для всех исходных наборов (source sets), а цвета определены в `commonMain`. Пользовательские шрифты требуют платформоспецифичной загрузки через `expect`/`actual` для каждого таргета.
 
@@ -61,7 +61,7 @@ actual fun getAppColorScheme(isDark: Boolean): ColorScheme =
 
 ### 1. Инкрементальное внедрение
 
-KMP и Compose Multiplatform поддерживают пошаговое внедрение в существующие проекты. Можно начать с вынесения общей бизнес-логики в `shared`-модуль, а затем постепенно переносить UI на Compose. Это критически важно для существующих проектов — не нужно переписывать всё сразу.
+KMP и Compose Multiplatform поддерживают пошаговое внедрение в существующие проекты. Можно начать с вынесения общей бизнес-логики в `composeApp`-модуль, а затем постепенно переносить UI на Compose. Это критически важно для существующих проектов — не нужно переписывать всё сразу.
 
 ### 2. Архитектура Clean/Modular
 

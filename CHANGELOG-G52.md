@@ -303,3 +303,108 @@
 - [Kotlin 2.2 Livestream — Language Evolution Team](https://www.youtube.com/watch?v=) — guards, non-local break/continue, multi-dollar strings
 - [Mocking in KMP — Mockative 2](https://github.com/mockative/mockative) — Mockative 2.x для KMP
 - [multiplatform-settings на GitHub](https://github.com/russhwolf/multiplatform-settings) — версия 1.2.0
+
+---
+
+# Часть 3: проверка качества — ошибки, несостыковки, англицизмы (30 июня 2026)
+
+После второго прохода выполнен третий — проверка качества: поиск битых ссылок, устаревших версий в неохваченных главах, англицизмов, опечаток.
+
+## Найденные и исправленные проблемы
+
+### Глава 00-introduction.md (полная переработка)
+**Проблемы:**
+- Строка 9: упоминание «Compose Multiplatform 1.8.0 в мае 2025» — устаревшая версия (актуальная 1.11.0).
+- Строка 11: «в 2025–2026 годах» — уже 2026.
+- Строка 23: «Версия 1.8.0 (май 2025) — стабильная поддержка iOS. Версия 1.9.0 (сентябрь 2025) — бета-поддержка Web» — устаревшая информация.
+- Строка 43: навигация содержала только `[Основы Kotlin →](01-kotlin-basics.md)` и `[Глубокое погружение в Kotlin →](20-deep-dive-kotlin.md)`, без стандартной «К содержанию».
+- В таблице «Уровни сложности» не были упомянуты практические руководства (28–37).
+
+**Исправления:**
+- Обновлены упоминания: добавлены версии 1.10, 1.11.0, Kotlin 2.4, добавлена веха мая 2026.
+- Изменена формулировка «в 2025–2026 годах» → «в 2026 году».
+- Добавлены все вехи CMP: 1.8.0 → 1.9.0 → 1.10.0 → 1.11.0 с конкретными месяцами.
+- Упоминание Kotlin 2.4.20-Beta1 (coroutine stack trace recovery).
+- Стандартизирована навигационная строка: `⬅️ [← Словарь программиста] | [К содержанию] | [Основы Kotlin →] ➡️`.
+- В таблице уровней сложности добавлены практические руководства (28–37).
+
+### Глава 01-kotlin-basics.md
+**Проблемы:**
+- Строка 89: англицизм «drastically снижает».
+- Несогласованная навигационная строка: `⬅️ [Назад к содержанию] | ➡️ [Compose Multiplatform →]` — отличается от других глав.
+
+**Исправления:**
+- «drastically снижает» → «значительно снижает».
+- Навигация: добавлена ссылка на предыдущую главу (`00-introduction.md`), стандартизирован формат.
+
+### Глава 23-integration-best-practices.md
+**Проблемы:**
+- В `libs.versions.toml` устаревшие версии: Kotlin 2.1.0, CMP 1.8.0, material3 1.3.0, AGP 8.7.0.
+- Англицизм «advantage'ов стека».
+- Упоминание модуля `shared` вместо актуального `composeApp`.
+
+**Исправления:**
+- Версии обновлены: Kotlin 2.4.0, CMP 1.11.0, material3 1.4.0, AGP 9.0.0.
+- «advantage'ов» → «преимуществ».
+- `shared`-модуль → `composeApp`-модуль (стандарт с CMP 1.10).
+- Добавлено пояснение «(стандартное имя с CMP 1.10)».
+
+### Глава 25-competitive-landscape.md
+**Проблемы:**
+- Строка 13: «stable с 1.8.0» — нужно обновить.
+- Строка 14: «Beta (Kotlin/Wasm)» — на самом деле stable-ready с 1.11.0.
+- Строка 58: «в 2025–2026 годах».
+
+**Исправления:**
+- «stable с 1.8.0» → «stable с 1.8.0 (зрелость в 1.11.0)».
+- «Beta (Kotlin/Wasm)» → «Stable-ready (Kotlin/Wasm с 1.11.0)».
+- «в 2025–2026 годах» → «в 2026 году».
+
+### Глава 27-sources.md (расширение)
+**Проблемы:**
+- Список источников содержал только 28 пунктов, не хватало свежих источников за 2026 (CMP 1.11, Kotlin 2.4, M3 Expressive).
+- Упоминание «What's New in Compose Multiplatform 1.9.3» — нужно обновить до 1.11.1.
+- Не было ссылок на kotlinx-coroutines 1.11, skiko, type-safe navigation.
+
+**Исправления:**
+- Список расширен с 28 до 36 пунктов.
+- Добавлены источники:
+  - CMP 1.11.0 (JetBrains Blog, май 2026).
+  - Kotlin 2.4.0 (JetBrains Blog, май 2026).
+  - What's New in CMP 1.11.1.
+  - kotlinx-coroutines releases на GitHub.
+  - What's new in Kotlin 2.4.0.
+  - JetBrains/skiko на GitHub.
+  - Type safety in Navigation Compose (Android Developers).
+  - Material 3 Motion (m3.material.io).
+  - KMPShip: «Is Kotlin Multiplatform production ready in 2026?».
+- Обновлены существующие ссылки (нумерация сдвинулась, но порядок сохранён).
+
+### Глава 37-app-size-optimization.md
+**Проблема:** В ProGuard-правилах устаревший groupId SQLDelight: `-keep class com.squareup.sqldelight.**` — этоgroupId версии 1.x, с 2.0 это `app.cash.sqldelight`.
+
+**Исправление:** `-keep class com.squareup.sqldelight.**` → `-keep class app.cash.sqldelight.**`, добавлен комментарий «groupId с версии 2.0 — app.cash.sqldelight».
+
+## Проверки, которые не выявили проблем
+
+### Битые ссылки между главами (главные главы)
+Проверены все `.md`-ссылки в корневых главах (00–37) — все валидны, нет несуществующих файлов.
+
+### Якоря в ссылках
+Проверены все ссылки с якорями (`file.md#anchor`) — все якоря существуют в целевых файлах.
+
+### Битые ссылки в metanit/ и kotlinlang/
+Найдено ~30 битых ссылок внутри переводов (kotlinlang/05-functions-lambdas/coroutines-overview.md ссылается на coroutines-basics.md в своём каталоге, но файла нет — он в kotlinlang/10-coroutines/). Эти переводы — сторонние, оставлены как есть по решению пользователя (только для контекста).
+
+## Итог третьего прохода
+
+| Глава | Тип исправления | Главное |
+|-------|-----------------|---------|
+| 00-introduction.md | Полная переработка | Версии 1.11.0/Kotlin 2.4, навигация, таблица уровней |
+| 01-kotlin-basics.md | Точечные правки | «drastically» → «значительно», навигация |
+| 23-integration-best-practices.md | Точечные правки | libs.versions.toml обновлён, «advantage'ов» → «преимуществ» |
+| 25-competitive-landscape.md | Точечные правки | Статусы iOS/Web, год |
+| 27-sources.md | Расширение | +8 новых источников за 2026 |
+| 37-app-size-optimization.md | Точечные правки | SQLDelight groupId в ProGuard |
+
+**Всего за три прохода обновлено:** 20 глав + README + CHANGELOG.

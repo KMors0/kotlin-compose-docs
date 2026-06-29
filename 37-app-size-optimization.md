@@ -69,8 +69,8 @@ android {
 # Koin
 -keep class org.koin.** { *; }
 
-# SQLDelight
--keep class com.squareup.sqldelight.** { *; }
+# SQLDelight (groupId с версии 2.0 — app.cash.sqldelight)
+-keep class app.cash.sqldelight.** { *; }
 ```
 
 Типичное сокращение: R8 уменьшает размер APK на **30–60%**.

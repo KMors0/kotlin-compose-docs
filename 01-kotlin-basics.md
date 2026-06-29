@@ -86,7 +86,7 @@ val name: String? = null
 val length = name?.length ?: 0 // длина = 0, если name == null
 ```
 
-Система null safety в Kotlin — одна из самых важных особенностей языка. В отличие от Java, где любая ссылка может быть `null`, Kotlin разделяет типы на nullable и non-nullable на уровне системы типов. Это означает, что компилятор принудительно требует обработки возможных `null`-значений, что drastically снижает количество `NullPointerException` в runtime.
+Система null safety в Kotlin — одна из самых важных особенностей языка. В отличие от Java, где любая ссылка может быть `null`, Kotlin разделяет типы на nullable и non-nullable на уровне системы типов. Это означает, что компилятор принудительно требует обработки возможных `null`-значений, что значительно снижает количество `NullPointerException` в runtime.
 
 **Расширенные примеры:**
 ```kotlin
@@ -102,4 +102,4 @@ val result: String? = data as? String
 
 ---
 
-⬅️ [Назад к содержанию](README.md) | ➡️ [Compose Multiplatform →](02-compose-multiplatform.md)
+⬅️ [← Введение](00-introduction.md) | [К содержанию](README.md) | [Compose Multiplatform →](02-compose-multiplatform.md) ➡️
