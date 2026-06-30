@@ -137,7 +137,7 @@ fun String.capitalizeWords(): String =
 "hello world".capitalizeWords()  // "Hello World"
 ```
 
-> [!INFO]
+> [!TIP]
 > В этом примере сразу несколько «магических» конструкций Kotlin:
 >
 > **`fun String.capitalizeWords()`** — это **extension function** (функция расширения). `String.` перед именем функции означает «добавь эту функцию к классу `String`». Внутри функции `this` ссылается на строку, к которой применена функция (в данном случае `"hello world"`).

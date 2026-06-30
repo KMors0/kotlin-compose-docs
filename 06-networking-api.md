@@ -273,7 +273,7 @@ suspend fun safeFetch(api: TaskApi): Result<TaskDto> = runCatching {
 }
 ```
 
-> [!INFO]
+> [!TIP]
 > **`runCatching { ... }`** — встроенная функция Kotlin, оборачивает результат в `Result<T>`. Если блок выполнился успешно — `Result.success(value)`. Если бросил исключение — `Result.failure(exception)`. Эквивалент `try { Result.success(block()) } catch (e) { Result.failure(e) }`, но без boilerplate.
 >
 > **`recoverCatching { e -> ... }`** — метод `Result`, позволяет заменить ошибку на новое значение (или пробросить другую ошибку). Лямбда получает исключение `e` и может либо вернуть значение, либо бросить новое исключение. В примере мы перехватываем исключения Ktor и пробрасываем их как более конкретные доменные исключения.

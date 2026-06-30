@@ -389,7 +389,7 @@ suspend fun syncTask(localTask: Task) {
 }
 ```
 
-> [!INFO]
+> [!TIP]
 > **`.copy(...)`** — метод, автоматически генерируемый для `data class` в Kotlin. Создаёт новую копию объекта с изменёнными полями. `serverTask.copy(syncState = SyncState.SYNCED)` создаёт новый `Task` со всеми полями как у `serverTask`, но с `syncState = SYNCED`. Оригинальный `serverTask` не изменяется (immutable). Это идиоматичный способ «обновить» одно поле в immutable-объекте.
 >
 > **`is SyncOperation.Update`** (в примере `when (operation)`) — smart cast: после `is SyncOperation.Update` компилятор автоматически приводит `operation` к типу `SyncOperation.Update`, и можно обращаться к `operation.task` без явного приведения.

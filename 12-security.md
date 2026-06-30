@@ -30,9 +30,10 @@ val apiKey = BuildConfig.API_KEY
 ## 12.2. Шифрование данных
 
 - **Bouncy Castle** — кроссплатформенная криптографическая библиотека.
+- **Google Tink** — высокоуровневая крипто-библиотека от Google, упрощает правильное использование криптографии.
 - **Платформенные API:** Keychain (iOS), Android Keystore.
 
-**Пример шифрования строки:**
+**Пример шифрования строки (через javax.crypto):**
 ```kotlin
 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
 cipher.init(Cipher.ENCRYPT_MODE, secretKey)
@@ -60,7 +61,148 @@ actual class SecureKeyStore {
 
 ---
 
-## 12.3. Защита от уязвимостей
+## 12.3. Google Tink — высокоуровневая криптография
+
+[Google Tink](https://github.com/tink-crypto/tink) — кроссплатформенная open-source крипто-библиотека от Google. Главное преимущество — **безопасность по умолчанию**: библиотека скрывает опасные низкоуровневые детали (выбор IV, padding, режим шифрования) и предоставляет простой API, в котором сложно ошибиться.
+
+> [!TIP]
+> **Зачем Tink, если есть javax.crypto?**
+> - `javax.crypto` доступен только на JVM/Android. На iOS, Web, Kotlin/Native его нет.
+> - Tink — мультиязыковой (Java, C++, Go, Python, JavaScript), работает везде.
+> - Tink использует ключи, помеченные как "primary", "rotated", "disabled" — упрощает ротацию ключей без прерывания работы приложения.
+> - Tink генерирует безопасные IV/nonce автоматически, вам не нужно думать об этом.
+
+### Подключение
+
+```toml
+# gradle/libs.versions.toml
+[versions]
+tink = "1.16.0"
+
+[libraries]
+tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
+```
+
+```kotlin
+// build.gradle.kts (androidMain или commonMain если KMP-обёртка)
+dependencies {
+    implementation(libs.tink)
+}
+```
+
+> **Важно (на 30 июня 2026):** Tink официально поддерживает Android и JVM. Для iOS/Kotlin-Native нужно либо использовать платформенные CryptoKit/CommonCrypto через expect/actual, либо обернуть Tink в Kotlin/JVM-сервис на сервере. Для полностью кроссплатформенного шифрования в KMP-проекте можно использовать [kotlin-multiplatform-libsodium](https://github.com/ionspin/kotlin-multiplatform-libsodium).
+
+### Симметричное шифрование (AES-GCM)
+
+```kotlin
+import com.google.crypto.tink.KeysetHandle
+import com.google.crypto.tink.aead.AeadConfig
+import com.google.crypto.tink.aead.AesGcmKeyManager
+import com.google.crypto.tink.aead.AesGcmHkdfStreamingKeyManager
+import com.google.crypto.tink.KeyTemplates
+
+// 1. Регистрируем AEAD (аутентифицированное шифрование)
+AeadConfig.register()
+
+// 2. Генерируем новый ключ (256-bit AES-GCM)
+val keysetHandle: KeysetHandle = KeysetHandle.generateNew(
+    KeyTemplates.get("AES256_GCM")
+)
+
+// 3. Получаем AEAD-примитив
+val aead = keysetHandle.getPrimitive(Aead::class.java)
+
+// 4. Шифруем
+val plaintext = "Секретное сообщение".toByteArray()
+val associatedData = "user:alice".toByteArray()  // привязка к контексту
+val ciphertext: ByteArray = aead.encrypt(plaintext, associatedData)
+
+// 5. Дешифруем
+val decrypted: ByteArray = aead.decrypt(ciphertext, associatedData)
+println(String(decrypted))  // "Секретное сообщение"
+```
+
+> [!TIP]
+> **`associatedData` (AAD) в AEAD-шифровании** — дополнительные данные, которые не шифруются, но **аутентифицируются**. Если AAD изменится при дешифровке — операция завершится с ошибкой. Используется для привязки шифртекста к контексту: например, `associatedData = "user:alice"` гарантирует, что шифртекст, созданный для Alice, нельзя расшифровать как сообщение для Bob.
+
+### Хранение ключей: Keyset
+
+Tink хранит ключи в **Keyset** — наборе ключей с метаданными (primary, rotated, disabled). Keyset можно сериализовать в JSON или бинарный формат:
+
+```kotlin
+import com.google.crypto.tink.CleartextKeysetHandle
+import com.google.crypto.tink.JsonKeysetWriter
+import java.io.ByteArrayOutputStream
+
+// Сериализация keyset в JSON (для хранения в Keychain/Keystore)
+val outputStream = ByteArrayOutputStream()
+CleartextKeysetHandle.write(keysetHandle, JsonKeysetWriter.withOutputStream(outputStream))
+val keysetJson: String = outputStream.toString()
+
+// Внимание: keysetJson содержит ключи в открытом виде!
+// Храните его только в защищённом хранилище (Android Keystore, iOS Keychain).
+```
+
+### Ротация ключей
+
+```kotlin
+import com.google.crypto.tink.KeysetManager
+
+// Добавляем новый ключ и делаем его primary
+val rotatedKeyset = KeysetManager.withKeysetHandle(keysetHandle)
+    .rotate(KeyTemplates.get("AES256_GCM"))
+    .keysetHandle
+
+// Старый ключ остаётся в keyset для дешифровки старых данных,
+// но новые данные шифруются новым primary ключом.
+```
+
+Ротация ключей — best practice: если ключ скомпрометирован, ущерб ограничен данными, зашифрованными этим ключом. Tink делает ротацию прозрачной — вам не нужно менять код.
+
+### Гибридное шифрование (ECIES)
+
+Для сценариев типа «отправить зашифрованное сообщение, не имея предварительного общего ключа» (мессенджеры):
+
+```kotlin
+import com.google.crypto.tink.HybridConfig
+import com.google.crypto.tink.hybrid.HybridKeyTemplates
+import com.google.crypto.tink.hybrid.HybridEncrypt
+import com.google.crypto.tink.hybrid.HybridDecrypt
+
+HybridConfig.register()
+
+// Получатель генерирует пару ключей
+val recipientKeyset = KeysetHandle.generateNew(HybridKeyTemplates.get("DHKEM_X25519_HKDF_SHA256_HKDF_SHA256_AES_256_GCM"))
+val publicKey = recipientKeyset.getPublicKey()
+
+// Отправитель шифрует публичным ключом
+val hybridEncrypt = publicKey.getPrimitive(HybridEncrypt::class.java)
+val ciphertext = hybridEncrypt.encrypt(plaintext, contextInfo)
+
+// Получатель дешифрует приватным ключом
+val hybridDecrypt = recipientKeyset.getPrimitive(HybridDecrypt::class.java)
+val decrypted = hybridDecrypt.decrypt(ciphertext, contextInfo)
+```
+
+> [!TIP]
+> **Когда использовать гибридное шифрование:** в P2P-мессенджерах (Direct-talk, E2E-чат) — когда две стороны не имеют общего ключа заранее, но хотят обмениваться зашифрованными сообщениями. См. [главу 38. P2P-сети и мессенджеры](38-p2p-networking.md) для полного руководства.
+
+### Сравнение крипто-решений для KMP
+
+| Библиотека | Платформы | Сложность | Когда выбирать |
+|------------|-----------|-----------|----------------|
+| **Google Tink** | JVM, Android (полностью); iOS — через обёртки | Низкая (high-level API) | Production-крипто на Android/JVM, простая ротация ключей |
+| **libsodium (kotlin-multiplatform-libsodium)** | Все KMP-платформы | Средняя | Полностью кроссплатформенное шифрование, включая iOS/Wasm |
+| **Bouncy Castle** | JVM, Android | Высокая (низкоуровневый API) | Нестандартные алгоритмы, совместимость с legacy-системами |
+| **javax.crypto** | JVM, Android | Средняя | Простые сценарии, когда не нужна кроссплатформенность |
+| **CryptoKit (iOS)** | iOS только | Низкая | Native iOS-приложения без KMP |
+| **Web Crypto API** | Web (Wasm/JS) | Низкая | Web-таргет |
+
+> **Best practice для KMP-мессенджера:** используйте **kotlin-multiplatform-libsodium** для полностью кроссплатформенного шифрования (Android, iOS, Desktop, Wasm). Tink — отличный выбор, если нужно серверное шифрование на JVM или Android-only клиент.
+
+---
+
+## 12.4. Защита от уязвимостей
 
 - **SQL-инъекции:** используйте параметризованные запросы (SQLDelight).
 - **XSS:** санитизируйте пользовательский ввод в веб-версии.

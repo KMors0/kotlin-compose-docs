@@ -90,6 +90,7 @@
 | 34 | [KMP Gotchas: подводные камни](34-kmp-gotchas.md) | New MM, freeze(), AtomicFU, retain cycles, serialization polymorphism |
 | 35 | [Адаптивные лейауты и foldables](31-adaptive-layouts.md) | WindowSizeClass, NavigationBar/Rail/Drawer, ListDetailPaneScaffold |
 | 36 | [Оптимизация размера приложения](37-app-size-optimization.md) | R8/ProGuard, shrinking iOS binaries, wasm tree-shaking, ресурсы |
+| 37 | [P2P-сети и мессенджеры](38-p2p-networking.md) | QUIC, WebRTC, STUN/TURN/ICE, E2E-шифрование, сигналинг, синхронизация между устройствами, push-уведомления в P2P |
 
 ### 📚 Справочник Kotlin (metanit.com)
 
